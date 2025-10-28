@@ -41,7 +41,13 @@ class MarkdownGenerator:
             Truncated text with ellipsis if needed
         """
         if len(text) > max_length:
-            return text[:max_length - 3] + '...'
+            # Handle Unicode properly by encoding/decoding
+            try:
+                truncated = text.encode('utf-8')[:max_length - 3].decode('utf-8', 'ignore')
+                return truncated + '...'
+            except (UnicodeDecodeError, UnicodeEncodeError):
+                # Fallback to simple truncation
+                return text[:max_length - 3] + '...'
         return text
     
     def generate_table(self, publications: List[Dict[str, str]]) -> str:

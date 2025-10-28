@@ -5,6 +5,14 @@ import requests
 from typing import List, Dict, Optional
 
 
+# Supported document file types and MIME types
+SUPPORTED_FORMATS = {
+    'extensions': ['.pdf', '.doc', '.docx'],
+    'mime_types': ['application/pdf', 'application/msword', 
+                   'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
+}
+
+
 class DSpaceClient:
     """Client for interacting with DSpace REST API."""
     
@@ -50,7 +58,7 @@ class DSpaceClient:
                 response.raise_for_status()
                 data = response.json()
                 items = data.get('_embedded', {}).get('items', [])
-            except Exception as e:
+            except requests.exceptions.RequestException as e:
                 print(f"Error fetching items: {e}")
                 items = []
         
@@ -105,12 +113,18 @@ class DSpaceClient:
         url = ''
         bitstreams = item.get('bitstreams', [])
         if bitstreams:
-            # Get the first PDF bitstream if available
+            # Get the first supported document bitstream if available
             for bitstream in bitstreams:
-                if 'pdf' in bitstream.get('name', '').lower() or bitstream.get('format') == 'application/pdf':
+                name = bitstream.get('name', '').lower()
+                mime_type = bitstream.get('format', '')
+                
+                # Check if file extension or MIME type matches supported formats
+                if any(ext in name for ext in SUPPORTED_FORMATS['extensions']) or \
+                   mime_type in SUPPORTED_FORMATS['mime_types']:
                     url = f"{self.endpoint}{bitstream.get('retrieveLink', '')}"
                     break
-            # If no PDF found, use first bitstream
+            
+            # If no supported format found, use first bitstream
             if not url and bitstreams:
                 url = f"{self.endpoint}{bitstreams[0].get('retrieveLink', '')}"
         

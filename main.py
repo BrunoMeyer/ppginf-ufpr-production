@@ -49,7 +49,14 @@ def main():
     for item in items:
         metadata = client.extract_metadata(item)
         publications.append(metadata)
-        print(f"  - {metadata['title'][:50]}...")
+        # Truncate title for display, handling Unicode properly
+        title_preview = metadata['title']
+        if len(title_preview) > 50:
+            try:
+                title_preview = title_preview.encode('utf-8')[:50].decode('utf-8', 'ignore') + '...'
+            except (UnicodeDecodeError, UnicodeEncodeError):
+                title_preview = title_preview[:50] + '...'
+        print(f"  - {title_preview}")
     
     # Generate markdown document
     print("\nGenerating markdown document...")
