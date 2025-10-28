@@ -88,11 +88,6 @@ Example:
 - `DSPACE_API_URL`: The base URL of your DSpace REST API (e.g., `https://dspace.example.edu/server/api`)
 - `COMMUNITY_ID`: The UUID of the community or subcommunity to extract items from
 
-### Optional Environment Variables
-
-- `DSPACE_EMAIL`: Email for authentication (if your DSpace instance requires authentication)
-- `DSPACE_PASSWORD`: Password for authentication (if your DSpace instance requires authentication)
-
 ## Requirements
 
 - Python 3.6+

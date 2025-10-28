@@ -30,7 +30,7 @@ env/
 
 # Output files
 extracted_items.json
-*.json
+output*.json
 
 # IDE
 .vscode/
