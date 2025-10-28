@@ -38,3 +38,4 @@ ENV/
 output/
 *.md
 !README.md
+!QUICKSTART.md
