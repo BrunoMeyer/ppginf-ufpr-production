@@ -50,8 +50,9 @@ class DSpaceClient:
             response = self.session.get(url, params={'expand': 'metadata,bitstreams'})
             response.raise_for_status()
             items = response.json()
-        except requests.exceptions.HTTPError:
+        except requests.exceptions.HTTPError as err:
             # Try alternative API pattern
+            print(err)
             try:
                 url = f"{self.endpoint}/server/api/core/collections/{collection_id}/items"
                 response = self.session.get(url)
