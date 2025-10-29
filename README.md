@@ -499,12 +499,12 @@ python main.py
 
 This enhanced workflow will:
 1. Perform all basic steps above
-2. Download each PDF document to the `./downloads` directory
+2. Download each PDF document to the `./downloads` directory (cached to avoid re-downloading)
 3. Extract text from each PDF
 4. Search for URLs related to source code repositories (GitHub, GitLab, Bitbucket, etc.)
 5. Add a new "Source Code" column to the markdown table with links to found repositories
 
-**Note**: PDF download and processing can take significant time for large collections. The feature caches downloaded PDFs to avoid re-downloading.
+**Note**: PDF download and processing can take significant time for large collections. The feature caches both downloaded PDFs and processing results, so subsequent runs will skip already-processed files and be much faster.
 
 ## Output Format
 
@@ -547,6 +547,7 @@ Total publications: 10
 - `pdf_downloader.py`: PDF downloader for fetching documents
 - `pdf_text_extractor.py`: PDF text extraction using pypdf/pdfplumber
 - `url_extractor.py`: Source code repository URL extraction from text
+- `processing_cache.py`: Cache manager for processed PDF results
 - `requirements.txt`: Python dependencies
 - `.env.example`: Example environment configuration
 - `test_*.py`: Unit and integration tests
@@ -557,6 +558,7 @@ Run the test suite:
 ```bash
 python test_markdown_generator.py
 python test_url_extractor.py
+python test_processing_cache.py
 python test_integration.py  # Requires reportlab: pip install reportlab
 ```
 

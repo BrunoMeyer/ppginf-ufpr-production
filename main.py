@@ -11,6 +11,7 @@ from markdown_generator import MarkdownGenerator
 from pdf_downloader import PDFDownloader
 from pdf_text_extractor import PDFTextExtractor
 from url_extractor import SourceCodeURLExtractor
+from processing_cache import ProcessingCache
 
 
 def main():
@@ -70,6 +71,7 @@ def main():
             downloader = PDFDownloader()
             text_extractor = PDFTextExtractor()
             url_extractor = SourceCodeURLExtractor()
+            cache = ProcessingCache()
             
             for i, pub in enumerate(publications, 1):
                 print(f"\n[{i}/{len(publications)}] Processing: {pub['title'][:50]}...")
@@ -78,22 +80,37 @@ def main():
                 pdf_path = downloader.download_pdf(pub['url'])
                 
                 if pdf_path:
-                    # Extract text from PDF
-                    text = text_extractor.extract_text(pdf_path)
+                    # Check cache first
+                    cached_urls = cache.get_cached_urls(pdf_path)
                     
-                    if text:
-                        # Find source code URLs in text
-                        source_urls = url_extractor.extract_source_code_urls(text)
-                        
-                        if source_urls:
-                            print(f"  Found {len(source_urls)} source code URL(s)")
-                            # Format URLs for display
-                            pub['source_urls'] = url_extractor.format_urls_for_display(source_urls)
+                    if cached_urls is not None:
+                        print(f"  Using cached results (found {len(cached_urls)} URL(s))")
+                        if cached_urls:
+                            pub['source_urls'] = url_extractor.format_urls_for_display(cached_urls)
                         else:
-                            print(f"  No source code URLs found")
                             pub['source_urls'] = 'N/A'
                     else:
-                        pub['source_urls'] = 'N/A'
+                        # Extract text from PDF
+                        text = text_extractor.extract_text(pdf_path)
+                        
+                        if text:
+                            # Find source code URLs in text
+                            source_urls = url_extractor.extract_source_code_urls(text)
+                            
+                            # Cache the results
+                            cache.cache_urls(pdf_path, source_urls)
+                            
+                            if source_urls:
+                                print(f"  Found {len(source_urls)} source code URL(s)")
+                                # Format URLs for display
+                                pub['source_urls'] = url_extractor.format_urls_for_display(source_urls)
+                            else:
+                                print(f"  No source code URLs found")
+                                pub['source_urls'] = 'N/A'
+                        else:
+                            # Cache empty result
+                            cache.cache_urls(pdf_path, [])
+                            pub['source_urls'] = 'N/A'
                 else:
                     pub['source_urls'] = 'N/A'
                     

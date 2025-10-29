@@ -38,6 +38,12 @@ EXTRACT_SOURCE_URLS=true
    - Uses context-aware extraction (looks for keywords near URLs)
    - Formats URLs for markdown display
 
+4. **processing_cache.py**
+   - Caches processed PDF results to avoid re-processing
+   - Stores extracted URLs in `.processing_cache.json`
+   - Uses file modification time to invalidate stale cache entries
+   - Significantly speeds up repeated runs
+
 ### Integration Points
 
 1. **main.py**
@@ -55,7 +61,8 @@ EXTRACT_SOURCE_URLS=true
 ### Test Files
 1. `test_url_extractor.py` - Unit tests for URL extraction
 2. `test_integration.py` - Integration tests for complete workflow
-3. `demo_url_extraction.py` - Demonstration script
+3. `test_processing_cache.py` - Unit tests for caching mechanism
+4. `demo_url_extraction.py` - Demonstration script
 
 ### Test Coverage
 - ✅ URL extraction from text
@@ -65,6 +72,7 @@ EXTRACT_SOURCE_URLS=true
 - ✅ End-to-end workflow
 - ✅ Error handling
 - ✅ Backward compatibility
+- ✅ Cache functionality and invalidation
 
 ## Usage Examples
 
@@ -92,7 +100,10 @@ Output: Enhanced table with 5 columns (Author, Title, URL, Summary, Source Code)
 
 ## Performance Considerations
 
-1. **Caching**: Downloaded PDFs are cached in `./downloads` to avoid redundant downloads
+1. **Caching**: 
+   - Downloaded PDFs are cached in `./downloads` to avoid redundant downloads
+   - **Processing results** are cached in `.processing_cache.json` to skip re-extracting text and URLs from already-processed PDFs
+   - Cache is automatically invalidated when PDF files are modified
 2. **Error Tolerance**: Failures in PDF processing don't stop the entire process
 3. **Timeout**: HTTP requests have a 30-second timeout to prevent hanging
 4. **Memory**: Text extraction is done page-by-page to handle large PDFs
@@ -117,8 +128,10 @@ pdfplumber>=0.11.0
 - `pdf_downloader.py`
 - `pdf_text_extractor.py`
 - `url_extractor.py`
+- `processing_cache.py`
 - `test_url_extractor.py`
 - `test_integration.py`
+- `test_processing_cache.py`
 - `demo_url_extraction.py`
 - `FEATURE_SUMMARY.md` (this file)
 
