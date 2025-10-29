@@ -15,11 +15,18 @@ class PDFTextExtractor:
         
         # Try to import PDF libraries
         try:
-            import PyPDF2
+            import pypdf
             self.pypdf_available = True
-            self.PyPDF2 = PyPDF2
+            self.pypdf = pypdf
         except ImportError:
-            pass
+            # Fall back to PyPDF2 if pypdf is not available
+            try:
+                import PyPDF2
+                self.pypdf_available = True
+                self.PyPDF2 = PyPDF2
+                self.use_pypdf2 = True
+            except ImportError:
+                pass
         
         try:
             import pdfplumber
@@ -30,13 +37,13 @@ class PDFTextExtractor:
         
         if not self.pypdf_available and not self.pdfplumber_available:
             raise ImportError(
-                "No PDF library available. Install PyPDF2 or pdfplumber: "
-                "pip install PyPDF2 pdfplumber"
+                "No PDF library available. Install pypdf or pdfplumber: "
+                "pip install pypdf pdfplumber"
             )
     
-    def extract_text_pypdf2(self, pdf_path: str) -> str:
+    def extract_text_pypdf(self, pdf_path: str) -> str:
         """
-        Extract text using PyPDF2.
+        Extract text using pypdf or PyPDF2.
         
         Args:
             pdf_path: Path to PDF file
@@ -47,13 +54,17 @@ class PDFTextExtractor:
         text = ""
         try:
             with open(pdf_path, 'rb') as file:
-                reader = self.PyPDF2.PdfReader(file)
+                # Use pypdf if available, otherwise PyPDF2
+                if hasattr(self, 'use_pypdf2'):
+                    reader = self.PyPDF2.PdfReader(file)
+                else:
+                    reader = self.pypdf.PdfReader(file)
                 for page in reader.pages:
                     page_text = page.extract_text()
                     if page_text:
                         text += page_text + "\n"
         except Exception as e:
-            print(f"  Error extracting text with PyPDF2: {e}")
+            print(f"  Error extracting text with pypdf: {e}")
         
         return text
     
@@ -101,9 +112,9 @@ class PDFTextExtractor:
             if text.strip():
                 return text
         
-        # Fall back to PyPDF2
+        # Fall back to pypdf/PyPDF2
         if self.pypdf_available:
-            text = self.extract_text_pypdf2(pdf_path)
+            text = self.extract_text_pypdf(pdf_path)
             if text.strip():
                 return text
         

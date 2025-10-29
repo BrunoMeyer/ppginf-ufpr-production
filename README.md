@@ -421,6 +421,7 @@ Total publications: 405
 
 - Extracts thesis and dissertation metadata from DSpace repositories
 - Generates markdown tables with publication summaries
+- **NEW**: Optionally downloads PDFs and extracts source code repository URLs (GitHub, GitLab, etc.)
 - Configurable via environment variables
 - Supports DSpace REST API (versions 6.x and 7.x)
 
@@ -453,6 +454,7 @@ DSPACE_ENDPOINT=https://your-dspace-instance.org
 COMMUNITY_ID=your-community-uuid
 SUBCOMMUNITY_ID=your-subcommunity-uuid  # Optional
 OUTPUT_FILE=production_summary.md
+EXTRACT_SOURCE_URLS=false  # Set to 'true' to enable PDF download and URL extraction
 ```
 
 ## Configuration
@@ -463,8 +465,11 @@ The following environment variables can be set in the `.env` file:
 - `COMMUNITY_ID` (required): UUID of the community to extract from
 - `SUBCOMMUNITY_ID` (optional): UUID of a specific subcommunity
 - `OUTPUT_FILE` (optional): Name of the output markdown file (default: `production_summary.md`)
+- `EXTRACT_SOURCE_URLS` (optional): Set to `true` to enable PDF download and source code URL extraction (default: `false`)
 
 ## Usage
+
+### Basic Usage
 
 Run the main script:
 ```bash
@@ -478,6 +483,29 @@ This will:
 4. Generate a markdown table with the publication summaries
 5. Save the output to the specified file
 
+### Advanced Usage: Source Code URL Extraction
+
+To enable PDF download and extraction of source code repository URLs, set `EXTRACT_SOURCE_URLS=true` in your `.env` file:
+
+```bash
+# In .env file
+EXTRACT_SOURCE_URLS=true
+```
+
+Then run the script:
+```bash
+python main.py
+```
+
+This enhanced workflow will:
+1. Perform all basic steps above
+2. Download each PDF document to the `./downloads` directory
+3. Extract text from each PDF
+4. Search for URLs related to source code repositories (GitHub, GitLab, Bitbucket, etc.)
+5. Add a new "Source Code" column to the markdown table with links to found repositories
+
+**Note**: PDF download and processing can take significant time for large collections. The feature caches downloaded PDFs to avoid re-downloading.
+
 ## Output Format
 
 The generated markdown file contains a table with the following columns:
@@ -486,8 +514,9 @@ The generated markdown file contains a table with the following columns:
 - **Title**: The title of the work
 - **URL**: Link to the document file or handle
 - **Summary**: Abstract or description (truncated to 200 characters)
+- **Source Code** (optional, when `EXTRACT_SOURCE_URLS=true`): Links to source code repositories found in the PDF
 
-Example output:
+### Example output (basic):
 ```markdown
 # Thesis and Dissertation Production Summary
 
@@ -498,13 +527,38 @@ Total publications: 10
 | John Doe | Machine Learning Applications | [Link](https://...) | This thesis explores... |
 ```
 
+### Example output (with source code URLs):
+```markdown
+# Thesis and Dissertation Production Summary
+
+Total publications: 10
+
+| Author | Title | URL | Summary | Source Code |
+|---|---|---|---|---|
+| John Doe | Machine Learning Applications | [Link](https://...) | This thesis explores... | [Github](https://github.com/johndoe/ml-app) |
+| Jane Smith | Deep Learning Study | [Link](https://...) | This research focuses... | [Github](https://github.com/janesmith/dl-study), [Gitlab](https://gitlab.com/janesmith/data) |
+```
+
 ## Project Structure
 
 - `main.py`: Main script to orchestrate the extraction and generation
 - `dspace_client.py`: DSpace API client for fetching publications
 - `markdown_generator.py`: Markdown table generator
+- `pdf_downloader.py`: PDF downloader for fetching documents
+- `pdf_text_extractor.py`: PDF text extraction using pypdf/pdfplumber
+- `url_extractor.py`: Source code repository URL extraction from text
 - `requirements.txt`: Python dependencies
 - `.env.example`: Example environment configuration
+- `test_*.py`: Unit and integration tests
+
+## Testing
+
+Run the test suite:
+```bash
+python test_markdown_generator.py
+python test_url_extractor.py
+python test_integration.py  # Requires reportlab: pip install reportlab
+```
 
 ## License
 
