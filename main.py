@@ -12,6 +12,7 @@ from pdf_downloader import PDFDownloader
 from pdf_text_extractor import PDFTextExtractor
 from url_extractor import SourceCodeURLExtractor
 from processing_cache import ProcessingCache
+from ollama_analyzer import OllamaAnalyzer
 
 
 def main():
@@ -25,6 +26,9 @@ def main():
     subcommunity_id = os.getenv('SUBCOMMUNITY_ID')
     output_file = os.getenv('OUTPUT_FILE', 'production_summary.md')
     extract_source_urls = os.getenv('EXTRACT_SOURCE_URLS', 'false').lower() in ('true', '1', 'yes')
+    enable_ollama_analysis = os.getenv('ENABLE_OLLAMA_ANALYSIS', 'false').lower() in ('true', '1', 'yes')
+    ollama_endpoint = os.getenv('OLLAMA_ENDPOINT', 'http://localhost:11434')
+    ollama_model = os.getenv('OLLAMA_MODEL', 'llama2')
     
     # Validate required configuration
     if not endpoint:
@@ -40,6 +44,10 @@ def main():
     if subcommunity_id:
         print(f"Subcommunity ID: {subcommunity_id}")
     print(f"Extract source URLs: {extract_source_urls}")
+    print(f"Ollama analysis enabled: {enable_ollama_analysis}")
+    if enable_ollama_analysis:
+        print(f"Ollama endpoint: {ollama_endpoint}")
+        print(f"Ollama model: {ollama_model}")
     
     # Initialize DSpace client
     client = DSpaceClient(endpoint)
@@ -123,9 +131,62 @@ def main():
             print("Continuing without source URL extraction...")
             extract_source_urls = False
     
+    # Perform Ollama analysis if enabled
+    if enable_ollama_analysis:
+        print("\nPerforming Ollama-based document analysis...")
+        try:
+            analyzer = OllamaAnalyzer(ollama_endpoint, ollama_model)
+            
+            # Test connection first
+            if not analyzer.test_connection():
+                print("  Warning: Cannot connect to Ollama. Skipping analysis.")
+                enable_ollama_analysis = False
+            else:
+                downloader = PDFDownloader()
+                text_extractor = PDFTextExtractor()
+                cache = ProcessingCache()
+                
+                for i, pub in enumerate(publications, 1):
+                    print(f"\n[{i}/{len(publications)}] Analyzing: {pub['title'][:50]}...")
+                    
+                    # Download PDF if not already done
+                    pdf_path = downloader.download_pdf(pub['url'])
+                    
+                    if pdf_path:
+                        # Extract text from PDF
+                        text = text_extractor.extract_text(pdf_path)
+                        
+                        if text and text.strip():
+                            # Analyze the document
+                            analysis = analyzer.analyze_document(text)
+                            
+                            if analysis:
+                                pub['ollama_analysis'] = analysis
+                            else:
+                                print(f"  Analysis failed for this document")
+                                pub['ollama_analysis'] = 'Analysis not available'
+                        else:
+                            print(f"  No text extracted, skipping analysis")
+                            pub['ollama_analysis'] = 'Analysis not available'
+                    else:
+                        print(f"  PDF not available, skipping analysis")
+                        pub['ollama_analysis'] = 'Analysis not available'
+                        
+        except ImportError as e:
+            print(f"\nError: {e}")
+            print("Continuing without Ollama analysis...")
+            enable_ollama_analysis = False
+        except Exception as e:
+            print(f"\nError during Ollama analysis: {e}")
+            print("Continuing without Ollama analysis...")
+            enable_ollama_analysis = False
+    
     # Generate markdown document
     print("\nGenerating markdown document...")
-    generator = MarkdownGenerator(include_source_urls=extract_source_urls)
+    generator = MarkdownGenerator(
+        include_source_urls=extract_source_urls,
+        include_ollama_analysis=enable_ollama_analysis
+    )
     markdown_content = generator.generate_document(
         publications, 
         title="Thesis and Dissertation Production Summary"

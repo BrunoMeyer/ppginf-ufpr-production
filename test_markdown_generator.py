@@ -73,6 +73,28 @@ class TestMarkdownGenerator(unittest.TestCase):
         self.assertIn('# Test Document', doc)
         self.assertIn('Total publications: 1', doc)
         self.assertIn('Test Author', doc)
+    
+    def test_generate_document_with_ollama_analysis(self):
+        """Test document generation with Ollama analysis."""
+        generator = MarkdownGenerator(include_ollama_analysis=True)
+        publications = [
+            {
+                'author': 'Test Author',
+                'title': 'Test Title',
+                'url': 'http://test.com',
+                'summary': 'Test summary',
+                'ollama_analysis': '# Analysis\n\nThis is a test analysis.'
+            }
+        ]
+        
+        doc = generator.generate_document(publications, "Test Document")
+        
+        # Check document structure
+        self.assertIn('# Test Document', doc)
+        self.assertIn('Document Analyses', doc)
+        self.assertIn('Document 1: Test Title', doc)
+        self.assertIn('**Author:** Test Author', doc)
+        self.assertIn('This is a test analysis.', doc)
 
 
 if __name__ == '__main__':
