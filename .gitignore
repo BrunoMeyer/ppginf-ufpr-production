@@ -39,3 +39,4 @@ output/
 *.md
 !README.md
 !QUICKSTART.md
+!FEATURE_SUMMARY.md

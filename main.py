@@ -8,6 +8,10 @@ import sys
 from dotenv import load_dotenv
 from dspace_client import DSpaceClient
 from markdown_generator import MarkdownGenerator
+from pdf_downloader import PDFDownloader
+from pdf_text_extractor import PDFTextExtractor
+from url_extractor import SourceCodeURLExtractor
+from processing_cache import ProcessingCache
 
 
 def main():
@@ -20,6 +24,7 @@ def main():
     community_id = os.getenv('COMMUNITY_ID')
     subcommunity_id = os.getenv('SUBCOMMUNITY_ID')
     output_file = os.getenv('OUTPUT_FILE', 'production_summary.md')
+    extract_source_urls = os.getenv('EXTRACT_SOURCE_URLS', 'false').lower() in ('true', '1', 'yes')
     
     # Validate required configuration
     if not endpoint:
@@ -34,6 +39,7 @@ def main():
     print(f"Community ID: {community_id}")
     if subcommunity_id:
         print(f"Subcommunity ID: {subcommunity_id}")
+    print(f"Extract source URLs: {extract_source_urls}")
     
     # Initialize DSpace client
     client = DSpaceClient(endpoint)
@@ -58,9 +64,68 @@ def main():
                 title_preview = title_preview[:50] + '...'
         print(f"  - {title_preview}")
     
+    # Extract source code URLs if enabled
+    if extract_source_urls:
+        print("\nExtracting source code URLs from PDFs...")
+        try:
+            downloader = PDFDownloader()
+            text_extractor = PDFTextExtractor()
+            url_extractor = SourceCodeURLExtractor()
+            cache = ProcessingCache()
+            
+            for i, pub in enumerate(publications, 1):
+                print(f"\n[{i}/{len(publications)}] Processing: {pub['title'][:50]}...")
+                
+                # Download PDF
+                pdf_path = downloader.download_pdf(pub['url'])
+                
+                if pdf_path:
+                    # Check cache first
+                    cached_urls = cache.get_cached_urls(pdf_path)
+                    
+                    if cached_urls is not None:
+                        print(f"  Using cached results (found {len(cached_urls)} URL(s))")
+                        if cached_urls:
+                            pub['source_urls'] = url_extractor.format_urls_for_display(cached_urls)
+                        else:
+                            pub['source_urls'] = 'N/A'
+                    else:
+                        # Extract text from PDF
+                        text = text_extractor.extract_text(pdf_path)
+                        
+                        if text:
+                            # Find source code URLs in text
+                            source_urls = url_extractor.extract_source_code_urls(text)
+                            
+                            # Cache the results
+                            cache.cache_urls(pdf_path, source_urls)
+                            
+                            if source_urls:
+                                print(f"  Found {len(source_urls)} source code URL(s)")
+                                # Format URLs for display
+                                pub['source_urls'] = url_extractor.format_urls_for_display(source_urls)
+                            else:
+                                print(f"  No source code URLs found")
+                                pub['source_urls'] = 'N/A'
+                        else:
+                            # Cache empty result
+                            cache.cache_urls(pdf_path, [])
+                            pub['source_urls'] = 'N/A'
+                else:
+                    pub['source_urls'] = 'N/A'
+                    
+        except ImportError as e:
+            print(f"\nError: {e}")
+            print("Continuing without source URL extraction...")
+            extract_source_urls = False
+        except Exception as e:
+            print(f"\nError during source URL extraction: {e}")
+            print("Continuing without source URL extraction...")
+            extract_source_urls = False
+    
     # Generate markdown document
     print("\nGenerating markdown document...")
-    generator = MarkdownGenerator()
+    generator = MarkdownGenerator(include_source_urls=extract_source_urls)
     markdown_content = generator.generate_document(
         publications, 
         title="Thesis and Dissertation Production Summary"
