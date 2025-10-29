@@ -459,6 +459,11 @@ COMMUNITY_ID=your-community-uuid
 SUBCOMMUNITY_ID=your-subcommunity-uuid  # Optional
 OUTPUT_FILE=production_summary.md
 EXTRACT_SOURCE_URLS=false  # Set to 'true' to enable PDF download and URL extraction
+
+# Ollama Analysis (optional)
+ENABLE_OLLAMA_ANALYSIS=false  # Set to 'true' to enable document analysis
+OLLAMA_ENDPOINT=http://localhost:11434
+OLLAMA_MODEL=llama2
 ```
 
 ## Configuration
@@ -470,6 +475,9 @@ The following environment variables can be set in the `.env` file:
 - `SUBCOMMUNITY_ID` (optional): UUID of a specific subcommunity
 - `OUTPUT_FILE` (optional): Name of the output markdown file (default: `production_summary.md`)
 - `EXTRACT_SOURCE_URLS` (optional): Set to `true` to enable PDF download and source code URL extraction (default: `false`)
+- `ENABLE_OLLAMA_ANALYSIS` (optional): Set to `true` to enable Ollama-based document analysis (default: `false`)
+- `OLLAMA_ENDPOINT` (optional): Ollama API endpoint (default: `http://localhost:11434`)
+- `OLLAMA_MODEL` (optional): Ollama model to use for analysis (default: `llama2`)
 
 ## Usage
 
@@ -509,6 +517,46 @@ This enhanced workflow will:
 5. Add a new "Source Code" column to the markdown table with links to found repositories
 
 **Note**: PDF download and processing can take significant time for large collections. The feature caches both downloaded PDFs and processing results, so subsequent runs will skip already-processed files and be much faster.
+
+### Advanced Usage: Ollama Document Analysis
+
+To enable comprehensive AI-powered analysis of document texts, you need to:
+
+1. Install and run Ollama locally (see https://ollama.ai for installation instructions)
+2. Pull a model (e.g., `ollama pull llama2`)
+3. Set `ENABLE_OLLAMA_ANALYSIS=true` in your `.env` file:
+
+```bash
+# In .env file
+ENABLE_OLLAMA_ANALYSIS=true
+OLLAMA_ENDPOINT=http://localhost:11434
+OLLAMA_MODEL=llama2
+```
+
+Then run the script:
+```bash
+python main.py
+```
+
+This will perform the following analyses on each document:
+1. Summarize the main points of the document
+2. Identify key themes and topics discussed
+3. Highlight significant findings or conclusions
+4. Summarize introduction and objectives
+5. Provide overview of methodology
+6. Outline results and discussions
+7. Conclude with implications and recommendations
+8. Describe research for general audience (press release style)
+9. Generate keywords for indexing
+10. List open research questions or future work
+
+The analysis results are appended to the markdown output in a separate "Document Analyses" section for each publication.
+
+**Note**: 
+- This feature requires Ollama to be running locally or on a remote server
+- Analysis can take significant time depending on document length and model speed
+- Ensure you have sufficient computational resources for running LLM inference
+- You can use different Ollama models by changing the `OLLAMA_MODEL` setting
 
 ## Output Format
 
@@ -551,6 +599,7 @@ Total publications: 10
 - `pdf_downloader.py`: PDF downloader for fetching documents
 - `pdf_text_extractor.py`: PDF text extraction using pypdf/pdfplumber
 - `url_extractor.py`: Source code repository URL extraction from text
+- `ollama_analyzer.py`: Ollama-based document text analysis
 - `processing_cache.py`: Cache manager for processed PDF results
 - `requirements.txt`: Python dependencies
 - `.env.example`: Example environment configuration
@@ -560,10 +609,11 @@ Total publications: 10
 
 Run the test suite:
 ```bash
-python test_markdown_generator.py
-python test_url_extractor.py
-python test_processing_cache.py
-python test_integration.py  # Requires reportlab: pip install reportlab
+python -m unittest test_markdown_generator
+python -m unittest test_url_extractor
+python -m unittest test_ollama_analyzer
+python -m unittest test_processing_cache
+python -m unittest test_integration  # Requires reportlab: pip install reportlab
 ```
 
 ## License
