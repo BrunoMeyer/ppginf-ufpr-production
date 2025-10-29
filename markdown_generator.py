@@ -7,9 +7,17 @@ from typing import List, Dict
 class MarkdownGenerator:
     """Generator for creating markdown tables from publication data."""
     
-    def __init__(self):
-        """Initialize the markdown generator."""
+    def __init__(self, include_source_urls: bool = False):
+        """
+        Initialize the markdown generator.
+        
+        Args:
+            include_source_urls: Whether to include source code URLs column
+        """
+        self.include_source_urls = include_source_urls
         self.headers = ['Author', 'Title', 'URL', 'Summary']
+        if include_source_urls:
+            self.headers.append('Source Code')
     
     def escape_markdown(self, text: str) -> str:
         """
@@ -76,7 +84,12 @@ class MarkdownGenerator:
             # Format URL as markdown link if available
             url_cell = f'[Link]({url})' if url else 'N/A'
             
-            row = f"| {author} | {title} | {url_cell} | {summary} |"
+            if self.include_source_urls:
+                source_urls = pub.get('source_urls', 'N/A')
+                row = f"| {author} | {title} | {url_cell} | {summary} | {source_urls} |"
+            else:
+                row = f"| {author} | {title} | {url_cell} | {summary} |"
+            
             lines.append(row)
         
         return '\n'.join(lines)
