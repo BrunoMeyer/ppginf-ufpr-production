@@ -40,30 +40,45 @@ class DSpaceClient:
         items = []
         
         # Determine which collection to query
-        collection_id = subcommunity_id if subcommunity_id else community_id
+        # collection_id = subcommunity_id if subcommunity_id else community_id
+        community_id = subcommunity_id if subcommunity_id else community_id
         
         # DSpace REST API endpoint for collection items
         # Note: DSpace has different API versions (v6, v7). This uses common patterns.
-        try:
-            # Try DSpace 6.x/7.x REST API pattern
-            url = f"{self.endpoint}/rest/collections/{collection_id}/items"
-            response = self.session.get(url, params={'expand': 'metadata,bitstreams'})
-            response.raise_for_status()
-            items = response.json()
-        except requests.exceptions.HTTPError as err:
-            # Try alternative API pattern
-            print(err)
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'}
+
+        collection_list = []
+        # Call url for getting all collections in a community
+        url = f"{self.endpoint}/rest/communities/{community_id}/collections"
+        response = self.session.get(url, headers=headers)
+        response.raise_for_status()
+        collections = response.json()
+        collection_list.extend([col['uuid'] for col in collections])
+        total_items = []
+        for collection_id in collection_list:
             try:
-                url = f"{self.endpoint}/server/api/core/collections/{collection_id}/items"
-                response = self.session.get(url)
+                # Try DSpace 6.x/7.x REST API pattern
+                url = f"{self.endpoint}/rest/collections/{collection_id}/items"
+                response = self.session.get(url, params={
+                    'expand': 'metadata,bitstreams',
+                    'limit': 1000
+                    }, headers=headers)
                 response.raise_for_status()
-                data = response.json()
-                items = data.get('_embedded', {}).get('items', [])
-            except requests.exceptions.RequestException as e:
-                print(f"Error fetching items: {e}")
-                items = []
-        
-        return items
+                items = response.json()
+            except requests.exceptions.HTTPError as err:
+                # Try alternative API pattern
+                print(err)
+                try:
+                    url = f"{self.endpoint}/server/api/core/collections/{collection_id}/items"
+                    response = self.session.get(url)
+                    response.raise_for_status()
+                    data = response.json()
+                    items = data.get('_embedded', {}).get('items', [])
+                except requests.exceptions.RequestException as e:
+                    print(f"Error fetching items: {e}")
+                    items = []
+            total_items+=items
+        return total_items
     
     def extract_metadata(self, item: Dict) -> Dict[str, str]:
         """
