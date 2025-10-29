@@ -12,6 +12,7 @@ class PDFTextExtractor:
         """Initialize PDF text extractor."""
         self.pypdf_available = False
         self.pdfplumber_available = False
+        self.use_pypdf2 = False
         
         # Try to import PDF libraries
         try:
@@ -55,7 +56,7 @@ class PDFTextExtractor:
         try:
             with open(pdf_path, 'rb') as file:
                 # Use pypdf if available, otherwise PyPDF2
-                if hasattr(self, 'use_pypdf2'):
+                if self.use_pypdf2:
                     reader = self.PyPDF2.PdfReader(file)
                 else:
                     reader = self.pypdf.PdfReader(file)
