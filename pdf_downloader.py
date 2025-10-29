@@ -78,7 +78,12 @@ class PDFDownloader:
             
             # Download PDF
             print(f"  Downloading: {url}")
-            response = requests.get(url, timeout=timeout, stream=True)
+            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'}
+            response = requests.get(
+                url,
+                headers=headers,
+                timeout=timeout,
+                stream=True)
             response.raise_for_status()
             
             # Check content type
