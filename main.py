@@ -12,6 +12,7 @@ from pdf_downloader import PDFDownloader
 from pdf_text_extractor import PDFTextExtractor
 from url_extractor import SourceCodeURLExtractor
 from processing_cache import ProcessingCache
+from ollama_analyzer import OllamaAnalyzer
 
 
 def main():
@@ -25,44 +26,82 @@ def main():
     subcommunity_id = os.getenv('SUBCOMMUNITY_ID')
     output_file = os.getenv('OUTPUT_FILE', 'production_summary.md')
     extract_source_urls = os.getenv('EXTRACT_SOURCE_URLS', 'false').lower() in ('true', '1', 'yes')
+    enable_ollama_analysis = os.getenv('ENABLE_OLLAMA_ANALYSIS', 'false').lower() in ('true', '1', 'yes')
+    ollama_endpoint = os.getenv('OLLAMA_ENDPOINT', 'http://localhost:11434')
+    ollama_model = os.getenv('OLLAMA_MODEL', 'llama2')
+    skip_dspace_listing = os.getenv('SKIP_DSPACE_LISTING', 'false').lower() in ('true', '1', 'yes')
     
-    # Validate required configuration
-    if not endpoint:
-        print("Error: DSPACE_ENDPOINT not set in .env file")
-        sys.exit(1)
-    
-    if not community_id:
-        print("Error: COMMUNITY_ID not set in .env file")
-        sys.exit(1)
+    # Validate required configuration (unless skipping DSpace listing)
+    if not skip_dspace_listing:
+        if not endpoint:
+            print("Error: DSPACE_ENDPOINT not set in .env file")
+            sys.exit(1)
+
+        if not community_id:
+            print("Error: COMMUNITY_ID not set in .env file")
+            sys.exit(1)
     
     print(f"Connecting to DSpace at: {endpoint}")
     print(f"Community ID: {community_id}")
     if subcommunity_id:
         print(f"Subcommunity ID: {subcommunity_id}")
     print(f"Extract source URLs: {extract_source_urls}")
+    print(f"Ollama analysis enabled: {enable_ollama_analysis}")
+    if enable_ollama_analysis:
+        print(f"Ollama endpoint: {ollama_endpoint}")
+        print(f"Ollama model: {ollama_model}")
     
-    # Initialize DSpace client
-    client = DSpaceClient(endpoint)
-    
-    # Fetch items from DSpace
-    print("\nFetching items from DSpace...")
-    items = client.get_community_items(community_id, subcommunity_id)
-    print(f"Found {len(items)} items")
-    
-    # Extract metadata from items
-    print("\nExtracting metadata...")
     publications = []
-    for item in items:
-        metadata = client.extract_metadata(item)
-        publications.append(metadata)
-        # Truncate title for display, handling Unicode properly
-        title_preview = metadata['title']
-        if len(title_preview) > 50:
-            try:
-                title_preview = title_preview.encode('utf-8')[:50].decode('utf-8', 'ignore') + '...'
-            except (UnicodeDecodeError, UnicodeEncodeError):
+    if skip_dspace_listing:
+        # Build publications list from cached/downloaded PDF files
+        print("\nSKIP_DSPACE_LISTING is enabled — using cached files only")
+        downloader = PDFDownloader()
+        downloads_dir = downloader.download_dir
+        # List PDF files in downloads directory
+        pdf_files = []
+        try:
+            for fname in os.listdir(downloads_dir):
+                if fname.lower().endswith('.pdf'):
+                    pdf_files.append(os.path.join(downloads_dir, fname))
+        except FileNotFoundError:
+            pdf_files = []
+
+        print(f"Found {len(pdf_files)} cached PDF(s) in: {downloads_dir}")
+        for pdf_path in pdf_files:
+            title = os.path.splitext(os.path.basename(pdf_path))[0]
+            publications.append({
+                'author': 'Unknown',
+                'title': title,
+                # Use file path as the url so downstream code can reference the file
+                'url': pdf_path,
+                'summary': 'No summary available (cached file)'
+            })
+            title_preview = title
+            if len(title_preview) > 50:
                 title_preview = title_preview[:50] + '...'
-        print(f"  - {title_preview}")
+            print(f"  - {title_preview}")
+    else:
+        # Initialize DSpace client
+        client = DSpaceClient(endpoint)
+
+        # Fetch items from DSpace
+        print("\nFetching items from DSpace...")
+        items = client.get_community_items(community_id, subcommunity_id)
+        print(f"Found {len(items)} items")
+
+        # Extract metadata from items
+        print("\nExtracting metadata...")
+        for item in items:
+            metadata = client.extract_metadata(item)
+            publications.append(metadata)
+            # Truncate title for display, handling Unicode properly
+            title_preview = metadata['title']
+            if len(title_preview) > 50:
+                try:
+                    title_preview = title_preview.encode('utf-8')[:50].decode('utf-8', 'ignore') + '...'
+                except (UnicodeDecodeError, UnicodeEncodeError):
+                    title_preview = title_preview[:50] + '...'
+            print(f"  - {title_preview}")
     
     # Extract source code URLs if enabled
     if extract_source_urls:
@@ -123,9 +162,62 @@ def main():
             print("Continuing without source URL extraction...")
             extract_source_urls = False
     
+    # Perform Ollama analysis if enabled
+    if enable_ollama_analysis:
+        print("\nPerforming Ollama-based document analysis...")
+        try:
+            analyzer = OllamaAnalyzer(ollama_endpoint, ollama_model)
+            
+            # Test connection first
+            if not analyzer.test_connection():
+                print("  Warning: Cannot connect to Ollama. Skipping analysis.")
+                enable_ollama_analysis = False
+            else:
+                downloader = PDFDownloader()
+                text_extractor = PDFTextExtractor()
+                cache = ProcessingCache()
+                
+                for i, pub in enumerate(publications, 1):
+                    print(f"\n[{i}/{len(publications)}] Analyzing: {pub['title'][:50]}...")
+                    
+                    # Download PDF if not already done
+                    pdf_path = downloader.download_pdf(pub['url'])
+                    
+                    if pdf_path:
+                        # Extract text from PDF
+                        text = text_extractor.extract_text(pdf_path)
+                        
+                        if text and text.strip():
+                            # Analyze the document
+                            analysis = analyzer.analyze_document(text)
+                            
+                            if analysis:
+                                pub['ollama_analysis'] = analysis
+                            else:
+                                print(f"  Analysis failed for this document")
+                                pub['ollama_analysis'] = 'Analysis not available'
+                        else:
+                            print(f"  No text extracted, skipping analysis")
+                            pub['ollama_analysis'] = 'Analysis not available'
+                    else:
+                        print(f"  PDF not available, skipping analysis")
+                        pub['ollama_analysis'] = 'Analysis not available'
+                        
+        except ImportError as e:
+            print(f"\nError: {e}")
+            print("Continuing without Ollama analysis...")
+            enable_ollama_analysis = False
+        except Exception as e:
+            print(f"\nError during Ollama analysis: {e}")
+            print("Continuing without Ollama analysis...")
+            enable_ollama_analysis = False
+    
     # Generate markdown document
     print("\nGenerating markdown document...")
-    generator = MarkdownGenerator(include_source_urls=extract_source_urls)
+    generator = MarkdownGenerator(
+        include_source_urls=extract_source_urls,
+        include_ollama_analysis=enable_ollama_analysis
+    )
     markdown_content = generator.generate_document(
         publications, 
         title="Thesis and Dissertation Production Summary"

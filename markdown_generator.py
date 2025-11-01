@@ -7,14 +7,16 @@ from typing import List, Dict
 class MarkdownGenerator:
     """Generator for creating markdown tables from publication data."""
     
-    def __init__(self, include_source_urls: bool = False):
+    def __init__(self, include_source_urls: bool = False, include_ollama_analysis: bool = False):
         """
         Initialize the markdown generator.
         
         Args:
             include_source_urls: Whether to include source code URLs column
+            include_ollama_analysis: Whether to include Ollama analysis section
         """
         self.include_source_urls = include_source_urls
+        self.include_ollama_analysis = include_ollama_analysis
         self.headers = ['Author', 'Title', 'URL', 'Summary']
         if include_source_urls:
             self.headers.append('Source Code')
@@ -113,5 +115,31 @@ class MarkdownGenerator:
             self.generate_table(publications),
             ""
         ]
+        
+        # Add Ollama analysis section if enabled
+        if self.include_ollama_analysis:
+            doc_parts.extend([
+                "",
+                "---",
+                "",
+                "# Document Analyses",
+                ""
+            ])
+            
+            for i, pub in enumerate(publications, 1):
+                analysis = pub.get('ollama_analysis', 'Analysis not available')
+                author = pub.get('author', 'Unknown')
+                title_text = pub.get('title', 'Untitled')
+                
+                doc_parts.extend([
+                    f"## Document {i}: {title_text}",
+                    "",
+                    f"**Author:** {author}",
+                    "",
+                    analysis,
+                    "",
+                    "---",
+                    ""
+                ])
         
         return '\n'.join(doc_parts)
