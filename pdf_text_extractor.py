@@ -5,6 +5,7 @@ from typing import Optional
 import os
 import multiprocessing
 import time
+from queue import Empty
 
 
 class PDFTextExtractor:
@@ -126,32 +127,52 @@ class PDFTextExtractor:
         result_q = multiprocessing.Queue()
         worker = multiprocessing.Process(target=_extract_text_worker, args=(pdf_path, result_q))
         worker.start()
-        worker.join(timeout)
 
+        # Prefer waiting on the queue result with a timeout to avoid the worker
+        # blocking on result_queue.put() when payload is large.
+        result = None
+        got_result = False
+        try:
+            result = result_q.get(timeout=timeout)
+            got_result = True
+        except Empty:
+            got_result = False
+
+        if not got_result:
+            # If we didn't get a result in time, terminate if still alive
+            if worker.is_alive():
+                try:
+                    worker.terminate()
+                finally:
+                    worker.join()
+                print(f"  Timeout ({timeout}s) extracting text from: {os.path.basename(pdf_path)}")
+                return None
+            else:
+                # Worker exited but queue is empty — try a final non-blocking get
+                try:
+                    result = result_q.get_nowait()
+                    got_result = True
+                except Empty:
+                    got_result = False
+
+        # Ensure the worker is reaped
         if worker.is_alive():
-            # Timed out, terminate the worker
+            worker.join()
+        else:
             try:
-                worker.terminate()
+                worker.join()
             except Exception:
                 pass
-            worker.join(1)
-            print(f"  Timeout ({timeout}s) extracting text from: {os.path.basename(pdf_path)}")
-            return None
 
-        # Worker finished — try to get result
+        # Parse result
         text = None
-        try:
-            result = result_q.get_nowait()
+        if got_result:
             if isinstance(result, dict):
                 if 'error' in result and result['error']:
                     print(f"  Extraction error: {result['error']}")
                 text = result.get('text')
             else:
-                # Old-style string result
                 text = result
-        except Exception:
-            # No result or queue empty
-            text = None
 
         if text and str(text).strip():
             return text

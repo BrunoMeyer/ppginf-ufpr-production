@@ -29,15 +29,17 @@ def main():
     enable_ollama_analysis = os.getenv('ENABLE_OLLAMA_ANALYSIS', 'false').lower() in ('true', '1', 'yes')
     ollama_endpoint = os.getenv('OLLAMA_ENDPOINT', 'http://localhost:11434')
     ollama_model = os.getenv('OLLAMA_MODEL', 'llama2')
+    skip_dspace_listing = os.getenv('SKIP_DSPACE_LISTING', 'false').lower() in ('true', '1', 'yes')
     
-    # Validate required configuration
-    if not endpoint:
-        print("Error: DSPACE_ENDPOINT not set in .env file")
-        sys.exit(1)
-    
-    if not community_id:
-        print("Error: COMMUNITY_ID not set in .env file")
-        sys.exit(1)
+    # Validate required configuration (unless skipping DSpace listing)
+    if not skip_dspace_listing:
+        if not endpoint:
+            print("Error: DSPACE_ENDPOINT not set in .env file")
+            sys.exit(1)
+
+        if not community_id:
+            print("Error: COMMUNITY_ID not set in .env file")
+            sys.exit(1)
     
     print(f"Connecting to DSpace at: {endpoint}")
     print(f"Community ID: {community_id}")
@@ -49,28 +51,57 @@ def main():
         print(f"Ollama endpoint: {ollama_endpoint}")
         print(f"Ollama model: {ollama_model}")
     
-    # Initialize DSpace client
-    client = DSpaceClient(endpoint)
-    
-    # Fetch items from DSpace
-    print("\nFetching items from DSpace...")
-    items = client.get_community_items(community_id, subcommunity_id)
-    print(f"Found {len(items)} items")
-    
-    # Extract metadata from items
-    print("\nExtracting metadata...")
     publications = []
-    for item in items:
-        metadata = client.extract_metadata(item)
-        publications.append(metadata)
-        # Truncate title for display, handling Unicode properly
-        title_preview = metadata['title']
-        if len(title_preview) > 50:
-            try:
-                title_preview = title_preview.encode('utf-8')[:50].decode('utf-8', 'ignore') + '...'
-            except (UnicodeDecodeError, UnicodeEncodeError):
+    if skip_dspace_listing:
+        # Build publications list from cached/downloaded PDF files
+        print("\nSKIP_DSPACE_LISTING is enabled — using cached files only")
+        downloader = PDFDownloader()
+        downloads_dir = downloader.download_dir
+        # List PDF files in downloads directory
+        pdf_files = []
+        try:
+            for fname in os.listdir(downloads_dir):
+                if fname.lower().endswith('.pdf'):
+                    pdf_files.append(os.path.join(downloads_dir, fname))
+        except FileNotFoundError:
+            pdf_files = []
+
+        print(f"Found {len(pdf_files)} cached PDF(s) in: {downloads_dir}")
+        for pdf_path in pdf_files:
+            title = os.path.splitext(os.path.basename(pdf_path))[0]
+            publications.append({
+                'author': 'Unknown',
+                'title': title,
+                # Use file path as the url so downstream code can reference the file
+                'url': pdf_path,
+                'summary': 'No summary available (cached file)'
+            })
+            title_preview = title
+            if len(title_preview) > 50:
                 title_preview = title_preview[:50] + '...'
-        print(f"  - {title_preview}")
+            print(f"  - {title_preview}")
+    else:
+        # Initialize DSpace client
+        client = DSpaceClient(endpoint)
+
+        # Fetch items from DSpace
+        print("\nFetching items from DSpace...")
+        items = client.get_community_items(community_id, subcommunity_id)
+        print(f"Found {len(items)} items")
+
+        # Extract metadata from items
+        print("\nExtracting metadata...")
+        for item in items:
+            metadata = client.extract_metadata(item)
+            publications.append(metadata)
+            # Truncate title for display, handling Unicode properly
+            title_preview = metadata['title']
+            if len(title_preview) > 50:
+                try:
+                    title_preview = title_preview.encode('utf-8')[:50].decode('utf-8', 'ignore') + '...'
+                except (UnicodeDecodeError, UnicodeEncodeError):
+                    title_preview = title_preview[:50] + '...'
+            print(f"  - {title_preview}")
     
     # Extract source code URLs if enabled
     if extract_source_urls:

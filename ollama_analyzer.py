@@ -4,12 +4,13 @@ Performs post-processing analysis of academic documents using Ollama LLM.
 """
 import requests
 from typing import Dict, Optional
+from ollama import Client
 
 
 class OllamaAnalyzer:
     """Analyzes document text using Ollama API."""
     
-    def __init__(self, endpoint: str, model: str):
+    def __init__(self, endpoint: str, model: str, use_client: bool = False):
         """
         Initialize Ollama analyzer.
         
@@ -20,6 +21,27 @@ class OllamaAnalyzer:
         self.endpoint = endpoint.rstrip('/')
         self.model = model
         self.session = requests.Session()
+        # Optionally use the official ollama Client when available. Default False to preserve
+        # backwards-compatible behavior (the test-suite and older setups expect HTTP calls).
+        self.client: Optional[Client] = None
+        self.use_client = bool(use_client)
+        if self.use_client:
+            try:
+                # Try a few common constructor signatures for compatibility
+                try:
+                    # Some versions accept the base URL as the first positional arg
+                    self.client = Client(self.endpoint)
+                except TypeError:
+                    try:
+                        # Other versions may use a named parameter
+                        self.client = Client(base_url=self.endpoint)
+                    except TypeError:
+                        # Fallback to default constructor (may use local daemon)
+                        self.client = Client()
+            except Exception as e:
+                # If we couldn't instantiate the client, keep using requests.Session()
+                print(f"  Warning: Could not instantiate ollama.Client, falling back to HTTP: {e}")
+                self.client = None
     
     def _call_ollama(self, prompt: str, timeout: int = 300) -> Optional[str]:
         """
@@ -32,6 +54,59 @@ class OllamaAnalyzer:
         Returns:
             Response text from Ollama, or None if request failed
         """
+        # If we have a client instance, prefer using it (more robust and future-proof)
+        if self.client is not None:
+            # Try several likely call signatures for client.generate/create_completion without assuming a timeout kwarg
+            try:
+                if hasattr(self.client, 'generate'):
+                    result = None
+                    # Try dict-style kwargs first, then positional
+                    for call_sig in (
+                        {'model': self.model, 'prompt': prompt, 'stream': False},
+                        {'model': self.model, 'prompt': prompt},
+                        (self.model, prompt),
+                    ):
+                        try:
+                            if isinstance(call_sig, dict):
+                                result = self.client.generate(**call_sig)
+                            else:
+                                result = self.client.generate(*call_sig)
+                            break
+                        except TypeError:
+                            # signature didn't match — try next
+                            continue
+
+                    if result is not None:
+                        if isinstance(result, str):
+                            return result
+                        if isinstance(result, dict):
+                            return result.get('response') or result.get('text') or result.get('output') or str(result)
+                        return str(result)
+
+                if hasattr(self.client, 'create_completion'):
+                    result = None
+                    for call_sig in (
+                        {'model': self.model, 'prompt': prompt},
+                        (self.model, prompt),
+                    ):
+                        try:
+                            if isinstance(call_sig, dict):
+                                result = self.client.create_completion(**call_sig)
+                            else:
+                                result = self.client.create_completion(*call_sig)
+                            break
+                        except TypeError:
+                            continue
+
+                    if result is not None:
+                        if isinstance(result, dict):
+                            return result.get('response') or result.get('text') or str(result)
+                        return str(result)
+
+            except (TypeError, AttributeError) as e:
+                print(f"  Ollama client call failed, falling back to HTTP: {e}")
+
+        # Fallback: use direct HTTP to the Ollama API endpoint (keeps previous behavior)
         try:
             url = f"{self.endpoint}/api/generate"
             payload = {
@@ -39,17 +114,18 @@ class OllamaAnalyzer:
                 "prompt": prompt,
                 "stream": False
             }
-            
+
             response = self.session.post(url, json=payload, timeout=timeout)
             response.raise_for_status()
-            
+
             result = response.json()
+            # Ollama HTTP response commonly contains 'response'
             return result.get('response', '')
         except requests.exceptions.RequestException as e:
-            print(f"  Error calling Ollama API: {e}")
+            print(f"  Error calling Ollama API over HTTP: {e}")
             return None
         except Exception as e:
-            print(f"  Unexpected error: {e}")
+            print(f"  Unexpected error calling Ollama API over HTTP: {e}")
             return None
     
     def analyze_document(self, text: str) -> Optional[str]:
