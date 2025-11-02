@@ -2,7 +2,10 @@
 DSpace API client for extracting thesis and dissertation publications.
 """
 import requests
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from processing_cache import ProcessingCache
 
 
 # Supported document file types and MIME types
@@ -16,15 +19,61 @@ SUPPORTED_FORMATS = {
 class DSpaceClient:
     """Client for interacting with DSpace REST API."""
     
-    def __init__(self, endpoint: str):
+    def __init__(self, endpoint: str, cache: Optional['ProcessingCache'] = None):
         """
         Initialize DSpace client.
         
         Args:
             endpoint: Base URL of the DSpace instance
+            cache: Optional ProcessingCache instance for caching HTTP responses
         """
         self.endpoint = endpoint.rstrip('/')
         self.session = requests.Session()
+        self.cache = cache
+    
+    def _get_with_cache(self, url: str, **kwargs) -> requests.Response:
+        """
+        Make an HTTP GET request with optional caching.
+        
+        Args:
+            url: URL to request
+            **kwargs: Additional arguments to pass to requests.get()
+            
+        Returns:
+            Response object (either from cache or fresh request)
+        """
+        # Check cache first if caching is enabled
+        if self.cache:
+            cached = self.cache.get_cached_dspace_response(url)
+            if cached:
+                # Create a mock response object with cached data
+                response = requests.Response()
+                response.status_code = 200
+                response.url = cached['resolved_url']
+                # Store the JSON data for json() method to return
+                import json
+                response._content = json.dumps(cached['response_body']).encode('utf-8')
+                response.encoding = 'utf-8'
+                return response
+        
+        # Make the actual HTTP request
+        response = self.session.get(url, **kwargs)
+        response.raise_for_status()
+        
+        # Cache the response if caching is enabled
+        if self.cache:
+            try:
+                # Get the response body as JSON
+                response_body = response.json()
+                # Get the resolved URL (final URL after redirects)
+                resolved_url = response.url
+                # Cache the response
+                self.cache.cache_dspace_response(url, response_body, resolved_url)
+            except Exception as e:
+                # Don't fail if caching fails
+                print(f"  Warning: Could not cache response: {e}")
+        
+        return response
     
     def get_community_items(self, community_id: str, subcommunity_id: Optional[str] = None) -> List[Dict]:
         """
@@ -50,8 +99,7 @@ class DSpaceClient:
         collection_list = []
         # Call url for getting all collections in a community
         url = f"{self.endpoint}/rest/communities/{community_id}/collections"
-        response = self.session.get(url, headers=headers)
-        response.raise_for_status()
+        response = self._get_with_cache(url, headers=headers)
         collections = response.json()
         collection_list.extend([col['uuid'] for col in collections])
         total_items = []
@@ -59,19 +107,17 @@ class DSpaceClient:
             try:
                 # Try DSpace 6.x/7.x REST API pattern
                 url = f"{self.endpoint}/rest/collections/{collection_id}/items"
-                response = self.session.get(url, params={
+                response = self._get_with_cache(url, params={
                     'expand': 'metadata,bitstreams',
                     'limit': 1000
                     }, headers=headers)
-                response.raise_for_status()
                 items = response.json()
             except requests.exceptions.HTTPError as err:
                 # Try alternative API pattern
                 print(err)
                 try:
                     url = f"{self.endpoint}/server/api/core/collections/{collection_id}/items"
-                    response = self.session.get(url)
-                    response.raise_for_status()
+                    response = self._get_with_cache(url)
                     data = response.json()
                     items = data.get('_embedded', {}).get('items', [])
                 except requests.exceptions.RequestException as e:

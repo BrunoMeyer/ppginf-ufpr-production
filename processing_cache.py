@@ -1,13 +1,13 @@
 """
-Cache manager for storing processed PDF results.
+Cache manager for storing processed PDF results and DSpace HTTP responses.
 """
 import os
 import json
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
 
 class ProcessingCache:
-    """Manages cache of processed PDFs and their extracted URLs."""
+    """Manages cache of processed PDFs and their extracted URLs, as well as DSpace HTTP responses."""
     
     def __init__(self, cache_dir: str = './downloads'):
         """
@@ -82,4 +82,41 @@ class ProcessingCache:
     def clear_cache(self):
         """Clear all cached data."""
         self.cache = {}
+        self._save_cache()
+    
+    def get_cached_dspace_response(self, url: str) -> Optional[Dict[str, Any]]:
+        """
+        Get cached DSpace HTTP response for a URL.
+        
+        Args:
+            url: The request URL
+            
+        Returns:
+            Dictionary with 'response_body' and 'resolved_url', or None if not in cache
+        """
+        cache_key = f"dspace_response:{url}"
+        
+        if cache_key in self.cache:
+            cached_data = self.cache[cache_key]
+            # Ensure backward compatibility - old cache entries may not have these fields
+            if isinstance(cached_data, dict) and 'response_body' in cached_data:
+                return cached_data
+        
+        return None
+    
+    def cache_dspace_response(self, url: str, response_body: Any, resolved_url: str):
+        """
+        Cache DSpace HTTP response body and resolved URL.
+        
+        Args:
+            url: The request URL
+            response_body: The HTTP response body (will be JSON serialized)
+            resolved_url: The final/resolved URL (e.g., after redirects)
+        """
+        cache_key = f"dspace_response:{url}"
+        
+        self.cache[cache_key] = {
+            'response_body': response_body,
+            'resolved_url': resolved_url
+        }
         self._save_cache()
