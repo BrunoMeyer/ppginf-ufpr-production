@@ -9,6 +9,10 @@ from typing import Dict, List, Optional, Any
 from datetime import datetime, timezone
 
 
+# Maximum characters to store from extracted text in vector JSON files
+MAX_EXTRACTED_TEXT_CHARS = 10000
+
+
 class ProductionOutput:
     """Manages output of individual document analysis results."""
     
@@ -55,11 +59,15 @@ class ProductionOutput:
         """
         Generate a unique document ID based on publication metadata.
         
+        Note: Uses MD5 for creating a short, consistent ID (not for security).
+        MD5 is sufficient here since we're just generating a document identifier
+        and collision risk is minimal for typical document collections.
+        
         Args:
             publication: Publication dictionary
             
         Returns:
-            Unique document ID
+            Unique document ID (12-character hex string)
         """
         # Create a hash from title and author for uniqueness
         title = publication.get('title', '')
@@ -195,7 +203,7 @@ class ProductionOutput:
                 'ollama_model': ollama_model
             },
             'text_data': {
-                'extracted_text': extracted_text[:10000] if extracted_text else "",  # Store first 10k chars
+                'extracted_text': extracted_text[:MAX_EXTRACTED_TEXT_CHARS] if extracted_text else "",  # Store first N chars
                 'total_characters': len(extracted_text) if extracted_text else 0,
                 'analysis_text': analysis_text,
                 'analysis_characters': len(analysis_text) if analysis_text else 0

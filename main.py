@@ -31,6 +31,7 @@ def main():
     ollama_endpoint = os.getenv('OLLAMA_ENDPOINT', 'http://localhost:11434')
     ollama_model = os.getenv('OLLAMA_MODEL', 'llama2')
     skip_dspace_listing = os.getenv('SKIP_DSPACE_LISTING', 'false').lower() in ('true', '1', 'yes')
+    # Individual outputs enabled by default to meet requirements - saves summary and vector files
     save_individual_outputs = os.getenv('SAVE_INDIVIDUAL_OUTPUTS', 'true').lower() in ('true', '1', 'yes')
     production_output_dir = os.getenv('PRODUCTION_OUTPUT_DIR', './production')
     
