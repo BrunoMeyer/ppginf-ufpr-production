@@ -81,8 +81,11 @@ def main():
                 title_preview = title_preview[:50] + '...'
             print(f"  - {title_preview}")
     else:
-        # Initialize DSpace client
-        client = DSpaceClient(endpoint)
+        # Initialize cache for DSpace responses
+        cache = ProcessingCache()
+        
+        # Initialize DSpace client with cache
+        client = DSpaceClient(endpoint, cache=cache)
 
         # Fetch items from DSpace
         print("\nFetching items from DSpace...")

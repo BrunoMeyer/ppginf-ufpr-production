@@ -197,7 +197,7 @@ List the possible open research questions or future work directions that can be 
 
 Provide your analysis now:"""
         
-        print("  Sending document to Ollama for analysis...")
+        print(f"  Sending document to Ollama for analysis... (len={len(text)} characters)")
         analysis = self._call_ollama(prompt)
         
         if analysis:
