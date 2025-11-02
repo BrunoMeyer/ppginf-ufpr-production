@@ -37,6 +37,7 @@ ENV/
 # Output files
 output/
 production/
+demo_production/
 *.md
 !README.md
 !QUICKSTART.md
