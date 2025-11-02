@@ -13,6 +13,7 @@ from pdf_text_extractor import PDFTextExtractor
 from url_extractor import SourceCodeURLExtractor
 from processing_cache import ProcessingCache
 from ollama_analyzer import OllamaAnalyzer
+from production_output import ProductionOutput
 
 
 def main():
@@ -30,6 +31,8 @@ def main():
     ollama_endpoint = os.getenv('OLLAMA_ENDPOINT', 'http://localhost:11434')
     ollama_model = os.getenv('OLLAMA_MODEL', 'llama2')
     skip_dspace_listing = os.getenv('SKIP_DSPACE_LISTING', 'false').lower() in ('true', '1', 'yes')
+    save_individual_outputs = os.getenv('SAVE_INDIVIDUAL_OUTPUTS', 'true').lower() in ('true', '1', 'yes')
+    production_output_dir = os.getenv('PRODUCTION_OUTPUT_DIR', './production')
     
     # Validate required configuration (unless skipping DSpace listing)
     if not skip_dspace_listing:
@@ -106,6 +109,9 @@ def main():
                     title_preview = title_preview[:50] + '...'
             print(f"  - {title_preview}")
     
+    # Dictionary to store extracted texts for vector saving
+    extracted_texts = {}
+    
     # Extract source code URLs if enabled
     if extract_source_urls:
         print("\nExtracting source code URLs from PDFs...")
@@ -134,6 +140,10 @@ def main():
                     else:
                         # Extract text from PDF
                         text = text_extractor.extract_text(pdf_path)
+                        
+                        # Store extracted text for later use
+                        if text:
+                            extracted_texts[pub['url']] = text
                         
                         if text:
                             # Find source code URLs in text
@@ -190,6 +200,10 @@ def main():
                         # Extract text from PDF
                         text = text_extractor.extract_text(pdf_path)
                         
+                        # Store extracted text for later use
+                        if text and text.strip():
+                            extracted_texts[pub['url']] = text
+                        
                         if text and text.strip():
                             # Analyze the document
                             analysis = analyzer.analyze_document(text)
@@ -214,6 +228,24 @@ def main():
             print(f"\nError during Ollama analysis: {e}")
             print("Continuing without Ollama analysis...")
             enable_ollama_analysis = False
+    
+    # Save individual document outputs if enabled
+    if save_individual_outputs and (enable_ollama_analysis or extract_source_urls):
+        print("\nSaving individual document outputs to production directory...")
+        try:
+            output_manager = ProductionOutput(production_output_dir)
+            saved_files = output_manager.save_all_documents(
+                publications, 
+                extracted_texts=extracted_texts,
+                ollama_model=ollama_model
+            )
+            
+            print(f"\nSaved {len(saved_files['summaries'])} summary files to: {production_output_dir}")
+            print(f"Saved {len(saved_files['vectors'])} vector files to: {production_output_dir}")
+            
+        except Exception as e:
+            print(f"\nError saving individual outputs: {e}")
+            print("Continuing with main markdown generation...")
     
     # Generate markdown document
     print("\nGenerating markdown document...")
