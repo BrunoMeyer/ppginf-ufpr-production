@@ -1,6 +1,7 @@
 """
 DSpace API client for extracting thesis and dissertation publications.
 """
+import json
 import requests
 from typing import List, Dict, Optional, TYPE_CHECKING
 
@@ -46,14 +47,17 @@ class DSpaceClient:
         if self.cache:
             cached = self.cache.get_cached_dspace_response(url)
             if cached:
-                # Create a mock response object with cached data
+                # Create a response object with cached data
+                # Using the requests.Response constructor and setting attributes
+                # in a way that's compatible with the requests library
                 response = requests.Response()
                 response.status_code = 200
                 response.url = cached['resolved_url']
-                # Store the JSON data for json() method to return
-                import json
+                # Encode the JSON data as bytes for the response content
                 response._content = json.dumps(cached['response_body']).encode('utf-8')
                 response.encoding = 'utf-8'
+                # Set headers to indicate JSON content
+                response.headers['Content-Type'] = 'application/json'
                 return response
         
         # Make the actual HTTP request
