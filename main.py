@@ -14,6 +14,7 @@ from url_extractor import SourceCodeURLExtractor
 from processing_cache import ProcessingCache
 from ollama_analyzer import OllamaAnalyzer
 from production_output import ProductionOutput
+from post_processing import PostProcessor
 
 
 def main():
@@ -34,6 +35,20 @@ def main():
     # Individual outputs enabled by default to meet requirements - saves summary and vector files
     save_individual_outputs = os.getenv('SAVE_INDIVIDUAL_OUTPUTS', 'true').lower() in ('true', '1', 'yes')
     production_output_dir = os.getenv('PRODUCTION_OUTPUT_DIR', './production')
+    
+    # Post-processing configuration
+    enable_post_processing = os.getenv('ENABLE_POST_PROCESSING', 'false').lower() in ('true', '1', 'yes')
+    post_processing_output_json = os.getenv('POST_PROCESSING_OUTPUT_JSON', 'analysis_results.json')
+    post_processing_output_html = os.getenv('POST_PROCESSING_OUTPUT_HTML', 'visualization.html')
+    clustering_method = os.getenv('CLUSTERING_METHOD', 'kmeans')
+    n_clusters = os.getenv('N_CLUSTERS')
+    if n_clusters:
+        try:
+            n_clusters = int(n_clusters)
+        except ValueError:
+            n_clusters = None
+    else:
+        n_clusters = None
 
     # Validate required configuration (unless skipping DSpace listing)
     if not skip_dspace_listing:
@@ -273,6 +288,39 @@ def main():
 
     print(f"\nMarkdown summary written to: {output_file}")
     print(f"Total publications: {len(publications)}")
+    
+    # Run post-processing analysis if enabled
+    if enable_post_processing:
+        print("\n" + "="*60)
+        print("Running post-processing analysis...")
+        print("="*60)
+        
+        try:
+            processor = PostProcessor(
+                output_dir=production_output_dir,
+                ollama_endpoint=ollama_endpoint,
+                ollama_model=ollama_model
+            )
+            
+            results = processor.run_full_analysis(
+                output_json=post_processing_output_json,
+                output_html=post_processing_output_html,
+                n_clusters=n_clusters,
+                clustering_method=clustering_method
+            )
+            
+            if results:
+                print(f"\nPost-processing complete!")
+                print(f"  - Analysis results saved to: {post_processing_output_json}")
+                print(f"  - Visualization saved to: {post_processing_output_html}")
+                print(f"  - Processed {results.get('n_documents', 0)} documents")
+                print(f"  - Found {results.get('n_clusters', 0)} clusters")
+            else:
+                print("\nPost-processing completed with no results (no documents found)")
+                
+        except Exception as e:
+            print(f"\nWarning: Post-processing failed: {e}")
+            print("Continuing without post-processing...")
 
 
 if __name__ == '__main__':
