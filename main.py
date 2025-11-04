@@ -13,13 +13,14 @@ from pdf_text_extractor import PDFTextExtractor
 from url_extractor import SourceCodeURLExtractor
 from processing_cache import ProcessingCache
 from ollama_analyzer import OllamaAnalyzer
+from production_output import ProductionOutput
 
 
 def main():
     """Main execution function."""
     # Load environment variables
     load_dotenv()
-    
+
     # Get configuration from environment
     endpoint = os.getenv('DSPACE_ENDPOINT')
     community_id = os.getenv('COMMUNITY_ID')
@@ -30,7 +31,10 @@ def main():
     ollama_endpoint = os.getenv('OLLAMA_ENDPOINT', 'http://localhost:11434')
     ollama_model = os.getenv('OLLAMA_MODEL', 'llama2')
     skip_dspace_listing = os.getenv('SKIP_DSPACE_LISTING', 'false').lower() in ('true', '1', 'yes')
-    
+    # Individual outputs enabled by default to meet requirements - saves summary and vector files
+    save_individual_outputs = os.getenv('SAVE_INDIVIDUAL_OUTPUTS', 'true').lower() in ('true', '1', 'yes')
+    production_output_dir = os.getenv('PRODUCTION_OUTPUT_DIR', './production')
+
     # Validate required configuration (unless skipping DSpace listing)
     if not skip_dspace_listing:
         if not endpoint:
@@ -40,7 +44,7 @@ def main():
         if not community_id:
             print("Error: COMMUNITY_ID not set in .env file")
             sys.exit(1)
-    
+
     print(f"Connecting to DSpace at: {endpoint}")
     print(f"Community ID: {community_id}")
     if subcommunity_id:
@@ -50,7 +54,7 @@ def main():
     if enable_ollama_analysis:
         print(f"Ollama endpoint: {ollama_endpoint}")
         print(f"Ollama model: {ollama_model}")
-    
+
     publications = []
     if skip_dspace_listing:
         # Build publications list from cached/downloaded PDF files
@@ -83,7 +87,7 @@ def main():
     else:
         # Initialize cache for DSpace responses
         cache = ProcessingCache()
-        
+
         # Initialize DSpace client with cache
         client = DSpaceClient(endpoint, cache=cache)
 
@@ -105,7 +109,12 @@ def main():
                 except (UnicodeDecodeError, UnicodeEncodeError):
                     title_preview = title_preview[:50] + '...'
             print(f"  - {title_preview}")
-    
+
+    # Dictionary to store extracted texts for vector saving
+    extracted_texts = {}
+    # Track user interruption to exit loops gracefully
+    interrupted = False
+
     # Extract source code URLs if enabled
     if extract_source_urls:
         print("\nExtracting source code URLs from PDFs...")
@@ -114,48 +123,56 @@ def main():
             text_extractor = PDFTextExtractor()
             url_extractor = SourceCodeURLExtractor()
             cache = ProcessingCache()
-            
-            for i, pub in enumerate(publications, 1):
-                print(f"\n[{i}/{len(publications)}] Processing: {pub['title'][:50]}...")
-                
-                # Download PDF
-                pdf_path = downloader.download_pdf(pub['url'])
-                
-                if pdf_path:
-                    # Check cache first
-                    cached_urls = cache.get_cached_urls(pdf_path)
-                    
-                    if cached_urls is not None:
-                        print(f"  Using cached results (found {len(cached_urls)} URL(s))")
-                        if cached_urls:
-                            pub['source_urls'] = url_extractor.format_urls_for_display(cached_urls)
-                        else:
-                            pub['source_urls'] = 'N/A'
-                    else:
-                        # Extract text from PDF
-                        text = text_extractor.extract_text(pdf_path)
-                        
-                        if text:
-                            # Find source code URLs in text
-                            source_urls = url_extractor.extract_source_code_urls(text)
-                            
-                            # Cache the results
-                            cache.cache_urls(pdf_path, source_urls)
-                            
-                            if source_urls:
-                                print(f"  Found {len(source_urls)} source code URL(s)")
-                                # Format URLs for display
-                                pub['source_urls'] = url_extractor.format_urls_for_display(source_urls)
+
+            try:
+                for i, pub in enumerate(publications, 1):
+                    print(f"\n[{i}/{len(publications)}] Processing: {pub['title'][:50]}...")
+
+                    # Download PDF
+                    pdf_path = downloader.download_pdf(pub['url'])
+
+                    if pdf_path:
+                        # Check cache first
+                        cached_urls = cache.get_cached_urls(pdf_path)
+
+                        if cached_urls is not None:
+                            print(f"  Using cached results (found {len(cached_urls)} URL(s))")
+                            if cached_urls:
+                                pub['source_urls'] = url_extractor.format_urls_for_display(cached_urls)
                             else:
-                                print(f"  No source code URLs found")
                                 pub['source_urls'] = 'N/A'
                         else:
-                            # Cache empty result
-                            cache.cache_urls(pdf_path, [])
-                            pub['source_urls'] = 'N/A'
-                else:
-                    pub['source_urls'] = 'N/A'
-                    
+                            # Extract text from PDF
+                            text = text_extractor.extract_text(pdf_path)
+
+                            # Store extracted text for later use
+                            if text:
+                                extracted_texts[pub['url']] = text
+
+                            if text:
+                                # Find source code URLs in text
+                                source_urls = url_extractor.extract_source_code_urls(text)
+
+                                # Cache the results
+                                cache.cache_urls(pdf_path, source_urls)
+
+                                if source_urls:
+                                    print(f"  Found {len(source_urls)} source code URL(s)")
+                                    # Format URLs for display
+                                    pub['source_urls'] = url_extractor.format_urls_for_display(source_urls)
+                                else:
+                                    print(f"  No source code URLs found")
+                                    pub['source_urls'] = 'N/A'
+                            else:
+                                # Cache empty result
+                                cache.cache_urls(pdf_path, [])
+                                pub['source_urls'] = 'N/A'
+                    else:
+                        pub['source_urls'] = 'N/A'
+            except KeyboardInterrupt:
+                print("\nInterrupted by user during source URL extraction. Proceeding to finalize current progress...")
+                interrupted = True
+
         except ImportError as e:
             print(f"\nError: {e}")
             print("Continuing without source URL extraction...")
@@ -164,13 +181,13 @@ def main():
             print(f"\nError during source URL extraction: {e}")
             print("Continuing without source URL extraction...")
             extract_source_urls = False
-    
+
     # Perform Ollama analysis if enabled
     if enable_ollama_analysis:
         print("\nPerforming Ollama-based document analysis...")
         try:
             analyzer = OllamaAnalyzer(ollama_endpoint, ollama_model)
-            
+
             # Test connection first
             if not analyzer.test_connection():
                 print("  Warning: Cannot connect to Ollama. Skipping analysis.")
@@ -179,33 +196,55 @@ def main():
                 downloader = PDFDownloader()
                 text_extractor = PDFTextExtractor()
                 cache = ProcessingCache()
-                
-                for i, pub in enumerate(publications, 1):
-                    print(f"\n[{i}/{len(publications)}] Analyzing: {pub['title'][:50]}...")
-                    
-                    # Download PDF if not already done
-                    pdf_path = downloader.download_pdf(pub['url'])
-                    
-                    if pdf_path:
-                        # Extract text from PDF
-                        text = text_extractor.extract_text(pdf_path)
-                        
-                        if text and text.strip():
-                            # Analyze the document
-                            analysis = analyzer.analyze_document(text)
-                            
-                            if analysis:
-                                pub['ollama_analysis'] = analysis
+                # Prepare output manager if saving per document is enabled
+                output_manager = ProductionOutput(production_output_dir) if save_individual_outputs else None
+
+                try:
+                    for i, pub in enumerate(publications, 1):
+                        print(f"\n[{i}/{len(publications)}] Analyzing: {pub['title'][:50]}...")
+
+                        # Download PDF if not already done
+                        pdf_path = downloader.download_pdf(pub['url'])
+
+                        if pdf_path:
+                            # Extract text from PDF
+                            text = text_extractor.extract_text(pdf_path)
+
+                            # Store extracted text for later use
+                            if text and text.strip():
+                                extracted_texts[pub['url']] = text
+
+                            if text and text.strip():
+                                # Analyze the document
+                                analysis = analyzer.analyze_document(text)
+
+                                if analysis:
+                                    pub['ollama_analysis'] = analysis
+                                else:
+                                    print(f"  Analysis failed for this document")
+                                    pub['ollama_analysis'] = 'Analysis not available'
                             else:
-                                print(f"  Analysis failed for this document")
+                                print(f"  No text extracted, skipping analysis")
                                 pub['ollama_analysis'] = 'Analysis not available'
                         else:
-                            print(f"  No text extracted, skipping analysis")
+                            print(f"  PDF not available, skipping analysis")
                             pub['ollama_analysis'] = 'Analysis not available'
-                    else:
-                        print(f"  PDF not available, skipping analysis")
-                        pub['ollama_analysis'] = 'Analysis not available'
-                        
+
+                        # Save this document's outputs immediately, if enabled
+                        if save_individual_outputs and output_manager is not None:
+                            try:
+                                summary_path = output_manager.save_document_summary(pub, i)
+                                vector_path = output_manager.save_document_vector(
+                                    pub, i, extracted_texts.get(pub.get('url', ''), ''), ollama_model
+                                )
+                                print(f"  Saved summary: {summary_path}")
+                                print(f"  Saved vector:  {vector_path}")
+                            except Exception as save_err:
+                                print(f"  Warning: Failed to save individual outputs: {save_err}")
+                except KeyboardInterrupt:
+                    print("\nInterrupted by user during Ollama analysis. Proceeding to finalize current progress...")
+                    interrupted = True
+
         except ImportError as e:
             print(f"\nError: {e}")
             print("Continuing without Ollama analysis...")
@@ -214,7 +253,9 @@ def main():
             print(f"\nError during Ollama analysis: {e}")
             print("Continuing without Ollama analysis...")
             enable_ollama_analysis = False
-    
+
+    # Note: individual outputs are saved during analysis per-document when enabled.
+
     # Generate markdown document
     print("\nGenerating markdown document...")
     generator = MarkdownGenerator(
@@ -222,14 +263,14 @@ def main():
         include_ollama_analysis=enable_ollama_analysis
     )
     markdown_content = generator.generate_document(
-        publications, 
+        publications,
         title="Thesis and Dissertation Production Summary"
     )
-    
+
     # Write to output file
     with open(output_file, 'w', encoding='utf-8') as f:
         f.write(markdown_content)
-    
+
     print(f"\nMarkdown summary written to: {output_file}")
     print(f"Total publications: {len(publications)}")
 

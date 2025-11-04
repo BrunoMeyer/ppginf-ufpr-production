@@ -32351,6 +32351,7 @@ This document provides a comprehensive exploration of leveraging knowledge from 
 - Extracts thesis and dissertation metadata from DSpace repositories
 - Generates markdown tables with publication summaries
 - **NEW**: Optionally downloads PDFs and extracts source code repository URLs (GitHub, GitLab, etc.)
+- **NEW**: Saves individual document summaries and vector representations with metadata to a production directory
 - Configurable via environment variables
 - Supports DSpace REST API (versions 6.x and 7.x)
 
@@ -32403,6 +32404,8 @@ The following environment variables can be set in the `.env` file:
 - `ENABLE_OLLAMA_ANALYSIS` (optional): Set to `true` to enable Ollama-based document analysis (default: `false`)
 - `OLLAMA_ENDPOINT` (optional): Ollama API endpoint (default: `http://localhost:11434`)
 - `OLLAMA_MODEL` (optional): Ollama model to use for analysis (default: `llama2`)
+- `SAVE_INDIVIDUAL_OUTPUTS` (optional): Set to `true` to save individual summary and vector files for each document (default: `true`)
+- `PRODUCTION_OUTPUT_DIR` (optional): Directory to save individual outputs (default: `./production`)
 
 ## Usage
 
@@ -32483,6 +32486,48 @@ The analysis results are appended to the markdown output in a separate "Document
 - Ensure you have sufficient computational resources for running LLM inference
 - You can use different Ollama models by changing the `OLLAMA_MODEL` setting
 
+### Advanced Usage: Individual Document Outputs
+
+When Ollama analysis or source URL extraction is enabled, the tool can automatically save individual outputs for each analyzed document to a production directory. This feature is enabled by default when using these advanced features.
+
+To customize this behavior, set these environment variables in your `.env` file:
+
+```bash
+# In .env file
+SAVE_INDIVIDUAL_OUTPUTS=true  # Set to 'false' to disable individual outputs
+PRODUCTION_OUTPUT_DIR=./production  # Change the output directory if needed
+```
+
+When enabled, the tool will create two files for each document in the production directory:
+
+1. **Summary files** (`*_summary.md`): Individual markdown files containing:
+   - Document metadata (author, title, URL, source code links)
+   - Summary/abstract
+   - Full Ollama analysis (if available)
+
+2. **Vector files** (`*_vector.json`): JSON files containing:
+   - Document metadata
+   - Text data (extracted text, character counts)
+   - Vector representation (embedding) for semantic analysis
+   - Information about the Ollama model used
+
+**File naming convention:**
+Files are named using the pattern: `{index}_{doc_id}_{sanitized_title}_{type}.{ext}`
+
+For example:
+- `0001_a1b2c3d4e5f6_Machine_Learning_Applications_summary.md`
+- `0001_a1b2c3d4e5f6_Machine_Learning_Applications_vector.json`
+
+**Note on embeddings:**
+The vector files currently contain simple statistical features based on text analysis. For production use with semantic similarity, consider integrating Ollama's embedding API to generate high-dimensional semantic vectors.
+
+**Use cases for individual outputs:**
+- Building a searchable document database
+- Performing similarity analysis between documents
+- Training machine learning models on document metadata
+- Creating a vector database for semantic search
+- Archiving processed documents with their analysis
+
 ## Output Format
 
 The generated markdown file contains a table with the following columns:
@@ -32525,6 +32570,7 @@ Total publications: 10
 - `pdf_text_extractor.py`: PDF text extraction using pypdf/pdfplumber
 - `url_extractor.py`: Source code repository URL extraction from text
 - `ollama_analyzer.py`: Ollama-based document text analysis
+- `production_output.py`: Production output manager for saving individual document files
 - `processing_cache.py`: Cache manager for processed PDF results
 - `requirements.txt`: Python dependencies
 - `.env.example`: Example environment configuration
@@ -32538,6 +32584,7 @@ python -m unittest test_markdown_generator
 python -m unittest test_url_extractor
 python -m unittest test_ollama_analyzer
 python -m unittest test_processing_cache
+python -m unittest test_production_output
 python -m unittest test_integration  # Requires reportlab: pip install reportlab
 ```
 
