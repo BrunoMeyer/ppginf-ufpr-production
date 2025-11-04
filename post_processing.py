@@ -14,12 +14,10 @@ from sklearn.cluster import KMeans, DBSCAN
 from sklearn.metrics.pairwise import cosine_similarity, euclidean_distances
 from sklearn.manifold import TSNE
 from sklearn.preprocessing import StandardScaler
-from scipy.spatial.distance import pdist, squareform
 import networkx as nx
 
 # Visualization libraries
 from wordcloud import WordCloud
-import plotly.graph_objects as go
 import plotly.express as px
 
 
