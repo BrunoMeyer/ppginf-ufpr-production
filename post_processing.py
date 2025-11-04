@@ -338,10 +338,17 @@ Provide a 2-3 sentence summary describing the common theme of these documents:""
             serializable_results = {}
             for key, value in results.items():
                 if isinstance(value, np.ndarray):
+                    # Convert to Python list, handling numpy types
                     serializable_results[key] = value.tolist()
+                elif isinstance(value, (np.integer, np.floating)):
+                    # Convert numpy scalars to Python types
+                    serializable_results[key] = value.item()
                 elif isinstance(value, nx.Graph):
                     # Convert graph to node-link format
-                    serializable_results[key] = nx.node_link_data(value)
+                    serializable_results[key] = nx.node_link_data(value, edges="links")
+                elif isinstance(value, dict):
+                    # Recursively handle dictionaries
+                    serializable_results[key] = self._make_json_serializable(value)
                 else:
                     serializable_results[key] = value
                     
@@ -353,6 +360,19 @@ Provide a 2-3 sentence summary describing the common theme of these documents:""
         except Exception as e:
             print(f"Error saving analysis results: {e}")
             return False
+    
+    def _make_json_serializable(self, obj):
+        """Recursively convert objects to JSON-serializable format."""
+        if isinstance(obj, dict):
+            return {k: self._make_json_serializable(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [self._make_json_serializable(item) for item in obj]
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        elif isinstance(obj, (np.integer, np.floating)):
+            return obj.item()
+        else:
+            return obj
     
     def create_visualization_html(self, results: Dict[str, Any], 
                                   output_path: str) -> bool:
