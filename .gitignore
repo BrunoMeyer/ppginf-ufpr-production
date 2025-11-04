@@ -43,6 +43,7 @@ demo_production/
 !QUICKSTART.md
 !FEATURE_SUMMARY.md
 !CHANGELOG.md
+!POST_PROCESSING_SUMMARY.md
 
 # Post-processing output
 cluster_*_wordcloud.png
