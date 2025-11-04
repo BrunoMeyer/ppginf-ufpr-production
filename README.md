@@ -32352,6 +32352,7 @@ This document provides a comprehensive exploration of leveraging knowledge from 
 - Generates markdown tables with publication summaries
 - **NEW**: Optionally downloads PDFs and extracts source code repository URLs (GitHub, GitLab, etc.)
 - **NEW**: Saves individual document summaries and vector representations with metadata to a production directory
+- **NEW**: Post-processing analysis with clustering, network graphs, t-SNE visualization, and word clouds
 - Configurable via environment variables
 - Supports DSpace REST API (versions 6.x and 7.x)
 
@@ -32528,6 +32529,51 @@ The vector files currently contain simple statistical features based on text ana
 - Creating a vector database for semantic search
 - Archiving processed documents with their analysis
 
+### Advanced Usage: Post-Processing Analysis
+
+After analyzing documents with Ollama, you can run post-processing to perform clustering, network analysis, and visualization:
+
+```bash
+# In .env file
+ENABLE_POST_PROCESSING=true
+POST_PROCESSING_OUTPUT_JSON=analysis_results.json
+POST_PROCESSING_OUTPUT_HTML=visualization.html
+CLUSTERING_METHOD=kmeans
+# N_CLUSTERS=5  # Optional: auto-determined if not set
+```
+
+Then run the script:
+```bash
+python main.py
+```
+
+This post-processing step will:
+
+1. **Load document vectors** from the production directory
+2. **Cluster embeddings** using K-means or DBSCAN unsupervised learning
+3. **Generate word clouds** for each cluster (saved as PNG files)
+4. **Use LLM to summarize** what each cluster represents
+5. **Compute pairwise similarity** matrix using cosine similarity, Euclidean distance, or correlation
+6. **Create network graph** showing document correlations (using NetworkX)
+7. **Apply t-SNE** dimensionality reduction for 2D visualization
+8. **Save results** to JSON file with all analysis outputs
+9. **Generate interactive HTML** visualization with:
+   - **Plotly scatter plot** showing t-SNE coordinates colored by cluster
+   - **vis.js network graph** showing document relationships
+
+**Output files:**
+- `analysis_results.json`: Complete analysis results in JSON format
+- `visualization.html`: Interactive HTML page with charts
+- `cluster_*_wordcloud.png`: Word cloud for each cluster
+
+**Configuration options:**
+- `CLUSTERING_METHOD`: Choose `'kmeans'` (default) or `'dbscan'`
+- `N_CLUSTERS`: Number of clusters for K-means (auto-determined if not set)
+- `POST_PROCESSING_OUTPUT_JSON`: Path to save analysis results
+- `POST_PROCESSING_OUTPUT_HTML`: Path to save visualization HTML
+
+**Note**: Post-processing requires that documents have been analyzed with Ollama first to generate embeddings. If using the Ollama embeddings API, ensure `OLLAMA_EMBEDDING_MODEL` is configured.
+
 ## Output Format
 
 The generated markdown file contains a table with the following columns:
@@ -32571,6 +32617,7 @@ Total publications: 10
 - `url_extractor.py`: Source code repository URL extraction from text
 - `ollama_analyzer.py`: Ollama-based document text analysis
 - `production_output.py`: Production output manager for saving individual document files
+- `post_processing.py`: Post-processing analysis with clustering, network graphs, and t-SNE
 - `processing_cache.py`: Cache manager for processed PDF results
 - `requirements.txt`: Python dependencies
 - `.env.example`: Example environment configuration
@@ -32585,6 +32632,7 @@ python -m unittest test_url_extractor
 python -m unittest test_ollama_analyzer
 python -m unittest test_processing_cache
 python -m unittest test_production_output
+python -m unittest test_post_processing
 python -m unittest test_integration  # Requires reportlab: pip install reportlab
 ```
 
